@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vclib"
+version = "0.1.0"
+description = "VulnCheck connector for OpenCTI"
+readme = "README.md"
+authors = [
+  { name = "VulnCheck" },
+  { name = "EJ Reilly", email = "ereilly@vulncheck.com" },
+]
+requires-python = ">= 3.12.7, <3.13"
+dependencies = [
+  "pycti==6.5.1",
+  "validators==0.34.0",
+  "vulncheck-sdk==0.0.8",
+  "pydantic>=2.10.4,<3.0.0",
+  "psutil==6.1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.3",
+  "pytest-mock==3.14.0",
+  "flake8==7.1.1",
+  "black==25.1.0",
+  "isort==6.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
