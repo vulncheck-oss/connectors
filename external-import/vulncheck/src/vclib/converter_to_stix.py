@@ -64,7 +64,11 @@ class ConverterToStix:
         return author
 
     def create_relationship(
-        self, source_id: str, relationship_type: str, target_id: str
+        self,
+        source_id: str,
+        relationship_type: str,
+        target_id: str,
+        labels: list[str] = [],
     ) -> stix2.Relationship:
         """Creates Relationship object
 
@@ -88,6 +92,7 @@ class ConverterToStix:
             target_ref=target_id,
             created_by_ref=self.author,
             object_marking_refs=[stix2.TLP_AMBER],
+            labels=labels,
         )
         return relationship
 
@@ -193,6 +198,7 @@ class ConverterToStix:
         name: str,
         infrastructure_type: str,
         last_seen=None,
+        labels: list[str] = [],
     ) -> stix2.Infrastructure:
         """Create Infrastructure Object
 
@@ -213,6 +219,7 @@ class ConverterToStix:
             created_by_ref=self.author,
             last_seen=last_seen,
             object_marking_refs=[stix2.TLP_AMBER],
+            labels=labels,
         )
         return stix_infrastructure
 
@@ -287,6 +294,7 @@ class ConverterToStix:
         is_family: bool,
         first_seen: str | None,
         description: str = "",
+        labels: list[str] = [],
     ) -> stix2.Malware:
         """Create Malware Object
 
@@ -311,6 +319,7 @@ class ConverterToStix:
                 first_seen=datetime.fromisoformat(first_seen),
                 created_by_ref=self.author,
                 object_marking_refs=[stix2.TLP_AMBER],
+                labels=labels,
             )
             if first_seen is not None
             else stix2.Malware(
@@ -320,6 +329,7 @@ class ConverterToStix:
                 is_family=is_family,
                 created_by_ref=self.author,
                 object_marking_refs=[stix2.TLP_AMBER],
+                labels=labels,
             )
         )
 
@@ -373,7 +383,11 @@ class ConverterToStix:
         return external_reference
 
     def create_threat_actor_group(
-        self, name: str, first_seen: datetime, external_refs: list
+        self,
+        name: str,
+        first_seen: datetime,
+        external_refs: list,
+        labels: list[str] = [],
     ) -> stix2.ThreatActor:
         """Create a Threat Actor Group Object
 
@@ -395,6 +409,7 @@ class ConverterToStix:
             external_references=external_refs,
             created_by_ref=self.author,
             object_marking_refs=[stix2.TLP_AMBER],
+            labels=labels,
         )
         return threat_actor
 
