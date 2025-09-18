@@ -275,23 +275,13 @@ def collect_vcnvd2(
 
     logger.info("[VULNCHECK NVD-2] Starting collection")
 
-    if connector_state is not None and data_source.VULNCHECK_NVD2 in connector_state:
-        _collect_vc_nvd2_from_api(
-            entities=client.get_vcnvd2(),
-            target_scope=target_scope,
-            helper=helper,
-            converter_to_stix=converter_to_stix,
-            logger=logger,
-            source_name=source_name,
-        )
-    else:
-        _collect_vc_nvd2_from_backup(
-            filepath=client.get_vcnvd2_backup_filepath(),
-            target_scope=target_scope,
-            helper=helper,
-            converter_to_stix=converter_to_stix,
-            logger=logger,
-            source_name=source_name,
-        )
+    _collect_vc_nvd2_from_backup(
+        filepath=client.get_vcnvd2_backup_filepath(),
+        target_scope=target_scope,
+        helper=helper,
+        converter_to_stix=converter_to_stix,
+        logger=logger,
+        source_name=source_name,
+    )
 
     logger.info("[VULNCHECK NVD-2] Data Source Completed!")

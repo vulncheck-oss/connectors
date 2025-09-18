@@ -274,21 +274,12 @@ def collect_nistnvd2(
 
     logger.info("[NIST NVD-2] Starting collection")
 
-    if connector_state is not None and data_source.NIST_NVD2 in connector_state:
-        _collect_nist_nvd2_from_api(
-            entities=client.get_nistnvd2(),
-            target_scope=target_scope,
-            helper=helper,
-            converter_to_stix=converter_to_stix,
-            logger=logger,
-        )
-    else:
-        _collect_nist_nvd2_from_backup(
-            filepath=client.get_nistnvd2_backup_filepath(),
-            target_scope=target_scope,
-            helper=helper,
-            converter_to_stix=converter_to_stix,
-            logger=logger,
-        )
+    _collect_nist_nvd2_from_backup(
+        filepath=client.get_nistnvd2_backup_filepath(),
+        target_scope=target_scope,
+        helper=helper,
+        converter_to_stix=converter_to_stix,
+        logger=logger,
+    )
 
     logger.info("[NIST NVD-2] Data Source Completed!")
