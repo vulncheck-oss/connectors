@@ -78,9 +78,11 @@ def _extract_stix_from_botnet(
                         _create_rel_related_to(
                             infrastructure=infrastructure,
                             vulnerability=vuln,
-                            labels=[entity.botnet_name]
-                            if entity.botnet_name is not None
-                            else [],
+                            labels=(
+                                [entity.botnet_name]
+                                if entity.botnet_name is not None
+                                else []
+                            ),
                             converter_to_stix=converter_to_stix,
                             logger=logger,
                         )
