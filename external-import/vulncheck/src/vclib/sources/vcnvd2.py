@@ -8,6 +8,8 @@ import vclib.util.works as works
 from pycti import OpenCTIConnectorHelper
 from pydantic import ValidationError
 from vclib.util.config import (
+    SCOPE_ATTACK_PATTERN,
+    SCOPE_COURSE_OF_ACTION,
     SCOPE_SOFTWARE,
     SCOPE_VULNERABILITY,
     compare_config_to_target_scope,
@@ -239,17 +241,188 @@ def _create_rel_has(
     )
 
 
+def _create_capec_attack_patterns_and_relationships(
+    entity: ApiNVD20CVEExtended, vuln: stix2.Vulnerability, converter_to_stix, logger
+) -> list:
+    """Create CAPEC attack pattern objects and relationships to vulnerability."""
+    result = []
+
+    if entity.related_attack_patterns is None:
+        return result
+
+    for pattern in entity.related_attack_patterns:
+        if pattern.capec_id is not None and pattern.capec_id.startswith("CAPEC-"):
+            # Create CAPEC attack pattern object
+            capec_attack_pattern = converter_to_stix.create_capec_attack_pattern(
+                capec_id=pattern.capec_id,
+                capec_name=pattern.capec_name or pattern.capec_id,
+                capec_url=pattern.capec_url
+                or f"https://capec.mitre.org/data/definitions/{pattern.capec_id.split('-')[1]}.html",
+            )
+            result.append(capec_attack_pattern)
+
+            # Create relationship: vulnerability -> uses -> attack pattern
+            relationship = converter_to_stix.create_relationship(
+                source_id=vuln["id"],
+                relationship_type="uses",
+                target_id=capec_attack_pattern["id"],
+            )
+            result.append(relationship)
+
+            logger.debug(
+                "[VULNCHECK NVD-2] Created CAPEC attack pattern and relationship",
+                {"capec_id": pattern.capec_id, "cve": entity.id},
+            )
+
+    return result
+
+
+def _create_mitre_attack_patterns_and_relationships(
+    entity: ApiNVD20CVEExtended, vuln: stix2.Vulnerability, converter_to_stix, logger
+) -> list:
+    """Create MITRE ATT&CK attack pattern objects and relationships to vulnerability."""
+    result = []
+
+    if entity.mitre_attack_techniques is None:
+        return result
+
+    for technique in entity.mitre_attack_techniques:
+        if technique.id is not None and technique.id.startswith("T"):
+            # Create MITRE ATT&CK attack pattern object
+            mitre_attack_pattern = converter_to_stix.create_mitre_attack_pattern(
+                technique_id=technique.id,
+                technique_name=technique.name or technique.id,
+                technique_url=technique.url
+                or f"https://attack.mitre.org/techniques/{technique.id}",
+            )
+            result.append(mitre_attack_pattern)
+
+            # Create relationship: vulnerability -> uses -> attack pattern
+            relationship = converter_to_stix.create_relationship(
+                source_id=vuln["id"],
+                relationship_type="uses",
+                target_id=mitre_attack_pattern["id"],
+            )
+            result.append(relationship)
+
+            logger.debug(
+                "[VULNCHECK NVD-2] Created MITRE ATT&CK attack pattern and relationship",
+                {"technique_id": technique.id, "cve": entity.id},
+            )
+
+    return result
+
+
+def _create_course_of_actions_and_relationships(
+    entity: ApiNVD20CVEExtended, attack_patterns: list, converter_to_stix, logger
+) -> list:
+    """Create Course of Action objects and relationships from MITRE attack technique mitigations."""
+    result = []
+
+    if entity.mitre_attack_techniques is None:
+        return result
+
+    # Create a map of attack pattern IDs to attack pattern objects for quick lookup
+    attack_pattern_map = {}
+    for ap in attack_patterns:
+        if (
+            hasattr(ap, "id")
+            and hasattr(ap, "custom_properties")
+            and "x_mitre_id" in ap.custom_properties
+        ):
+            attack_pattern_map[ap.custom_properties["x_mitre_id"]] = ap
+
+    for technique in entity.mitre_attack_techniques:
+        if technique.id is not None and technique.mitigations is not None:
+            for mitigation in technique.mitigations:
+                if mitigation.id is not None and mitigation.description is not None:
+                    # Create Course of Action object
+                    course_of_action = converter_to_stix.create_course_of_action(
+                        name=mitigation.id,
+                        description=mitigation.description,
+                    )
+                    result.append(course_of_action)
+
+                    # Create relationship: course-of-action -> mitigates -> attack-pattern
+                    # Only create relationship if the corresponding attack pattern exists
+                    if technique.id in attack_pattern_map:
+                        relationship = converter_to_stix.create_relationship(
+                            source_id=course_of_action["id"],
+                            relationship_type="mitigates",
+                            target_id=attack_pattern_map[technique.id]["id"],
+                        )
+                        result.append(relationship)
+
+                        logger.debug(
+                            "[VULNCHECK NVD-2] Created Course of Action and mitigation relationship",
+                            {
+                                "mitigation_id": mitigation.id,
+                                "technique_id": technique.id,
+                                "cve": entity.id,
+                            },
+                        )
+
+    return result
+
+
 def _extract_stix_from_vcnvd2(
     entity: ApiNVD20CVEExtended, target_scope: list[str], converter_to_stix, logger
 ) -> list:
     result = []
     vuln = None
+    attack_patterns = []
 
     if SCOPE_VULNERABILITY in target_scope:
         vuln = _create_vuln(
             entity=entity, converter_to_stix=converter_to_stix, logger=logger
         )
         result.append(vuln)
+
+    if SCOPE_ATTACK_PATTERN in target_scope and vuln is not None:
+        # Create CAPEC attack patterns and relationships
+        capec_objects = _create_capec_attack_patterns_and_relationships(
+            entity=entity,
+            vuln=vuln,
+            converter_to_stix=converter_to_stix,
+            logger=logger,
+        )
+        result.extend(capec_objects)
+        # Extract only the attack pattern objects for course of action relationships
+        attack_patterns.extend(
+            [
+                obj
+                for obj in capec_objects
+                if hasattr(obj, "type") and obj.type == "attack-pattern"
+            ]
+        )
+
+        # Create MITRE ATT&CK attack patterns and relationships
+        mitre_objects = _create_mitre_attack_patterns_and_relationships(
+            entity=entity,
+            vuln=vuln,
+            converter_to_stix=converter_to_stix,
+            logger=logger,
+        )
+        result.extend(mitre_objects)
+        # Extract only the attack pattern objects for course of action relationships
+        attack_patterns.extend(
+            [
+                obj
+                for obj in mitre_objects
+                if hasattr(obj, "type") and obj.type == "attack-pattern"
+            ]
+        )
+
+    if SCOPE_COURSE_OF_ACTION in target_scope and attack_patterns:
+        # Create Course of Action objects and relationships to attack patterns
+        result.extend(
+            _create_course_of_actions_and_relationships(
+                entity=entity,
+                attack_patterns=attack_patterns,
+                converter_to_stix=converter_to_stix,
+                logger=logger,
+            )
+        )
 
     if SCOPE_SOFTWARE in target_scope and entity.vc_vulnerable_cpes is not None:
         for cpe in entity.vc_vulnerable_cpes:
@@ -405,7 +578,12 @@ def collect_vcnvd2(
     connector_state: dict,
 ) -> None:
     source_name = "VulnCheck NVD-2"
-    target_scope = [SCOPE_VULNERABILITY, SCOPE_SOFTWARE]
+    target_scope = [
+        SCOPE_VULNERABILITY,
+        SCOPE_SOFTWARE,
+        SCOPE_ATTACK_PATTERN,
+        SCOPE_COURSE_OF_ACTION,
+    ]
     target_scope = compare_config_to_target_scope(
         config=config,
         target_scope=target_scope,
