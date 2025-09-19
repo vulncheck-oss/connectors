@@ -11,6 +11,7 @@ from vulncheck_sdk.models.advisory_cvssv40 import AdvisoryCVSSV40
 from vulncheck_sdk.models.api_nvd20_cve import ApiNVD20CVE
 from vulncheck_sdk.models.api_nvd20_cvss_data_v2 import ApiNVD20CvssDataV2
 from vulncheck_sdk.models.api_nvd20_cvss_data_v3 import ApiNVD20CvssDataV3
+from vulncheck_sdk.models.api_nvd20_weakness import ApiNVD20Weakness
 
 import vclib.util.works as works
 from vclib.util.config import (
@@ -31,8 +32,6 @@ def _get_cvss_v2_properties(cvss_data: ApiNVD20CvssDataV2 | None) -> dict[str, A
     properties = {}
     if cvss_data.base_score is not None:
         properties["x_opencti_cvss_v2_base_score"] = cvss_data.base_score
-    # if cvss_data.vector_string is not None:
-    #     properties["x_opencti_cvss_v2_vector_string"] = cvss_data.vector_string
     if cvss_data.access_vector is not None:
         properties["x_opencti_cvss_v2_access_vector"] = cvss_data.access_vector
     if cvss_data.access_complexity is not None:
@@ -51,8 +50,6 @@ def _get_cvss_v2_properties(cvss_data: ApiNVD20CvssDataV2 | None) -> dict[str, A
         )
     if cvss_data.temporal_score is not None:
         properties["x_opencti_cvss_v2_temporal_score"] = cvss_data.temporal_score
-    if cvss_data.exploitability is not None:
-        properties["x_opencti_cvss_v2_exploitability"] = cvss_data.exploitability
     if cvss_data.remediation_level is not None:
         properties["x_opencti_cvss_v2_remediation_level"] = cvss_data.remediation_level
     if cvss_data.report_confidence is not None:
@@ -70,8 +67,6 @@ def _get_cvss_v3_properties(cvss_data: ApiNVD20CvssDataV3 | None) -> dict[str, A
         properties["x_opencti_cvss_base_score"] = cvss_data.base_score
     if cvss_data.base_severity is not None:
         properties["x_opencti_cvss_base_severity"] = cvss_data.base_severity
-    # if cvss_data.vector_string is not None:
-    #     properties["x_opencti_cvss_vector_string"] = cvss_data.vector_string
     if cvss_data.attack_vector is not None:
         properties["x_opencti_cvss_attack_vector"] = cvss_data.attack_vector
     if cvss_data.attack_complexity is not None:
@@ -99,6 +94,21 @@ def _get_cvss_v3_properties(cvss_data: ApiNVD20CvssDataV3 | None) -> dict[str, A
     return properties
 
 
+def _get_cwe_ids(weaknesses: list[ApiNVD20Weakness] | None) -> list[str]:
+    """Extract CWE IDs from weaknesses data."""
+    if weaknesses is None:
+        return []
+
+    cwe_ids = []
+    for weakness in weaknesses:
+        if weakness.description is not None:
+            for desc in weakness.description:
+                if desc.value is not None and desc.value.startswith("CWE-"):
+                    cwe_ids.append(desc.value)
+
+    return list(set(cwe_ids))  # Remove duplicates
+
+
 def _get_cvss_v4_properties(cvss_data: AdvisoryCVSSV40 | None) -> dict[str, Any]:
     """Get CVSS v4 properties as a dictionary."""
     if cvss_data is None:
@@ -109,8 +119,6 @@ def _get_cvss_v4_properties(cvss_data: AdvisoryCVSSV40 | None) -> dict[str, Any]
         properties["x_opencti_cvss_v4_base_score"] = cvss_data.base_score
     if cvss_data.base_severity is not None:
         properties["x_opencti_cvss_v4_base_severity"] = cvss_data.base_severity
-    # if cvss_data.vector_string is not None:
-    #     properties["x_opencti_cvss_v4_vector_string"] = cvss_data.vector_string
     if cvss_data.attack_vector is not None:
         properties["x_opencti_cvss_v4_attack_vector"] = cvss_data.attack_vector
     if cvss_data.attack_complexity is not None:
@@ -163,6 +171,11 @@ def _create_vuln(entity: ApiNVD20CVE, converter_to_stix, logger) -> stix2.Vulner
         else ""
     )
     custom_props = {}
+
+    # Extract CWE IDs
+    cwe_ids = _get_cwe_ids(entity.weaknesses)
+    if cwe_ids:
+        custom_props["x_opencti_cwe"] = cwe_ids
 
     if entity.metrics is not None:
         if entity.metrics.cvss_metric_v2 is not None:
