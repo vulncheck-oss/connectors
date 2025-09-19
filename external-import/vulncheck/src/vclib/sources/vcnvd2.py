@@ -340,6 +340,7 @@ def _create_course_of_actions_and_relationships(
                     course_of_action = converter_to_stix.create_course_of_action(
                         name=mitigation.id,
                         description=mitigation.description,
+                        mitigation_url=mitigation.mitigation_url,
                     )
                     result.append(course_of_action)
 
@@ -389,11 +390,7 @@ def _extract_stix_from_vcnvd2(
         result.extend(capec_objects)
         # Extract only the attack pattern objects for course of action relationships
         attack_patterns.extend(
-            [
-                obj
-                for obj in capec_objects
-                if hasattr(obj, "type") and obj.type == "attack-pattern"
-            ]
+            [obj for obj in capec_objects if isinstance(obj, stix2.AttackPattern)]
         )
 
         # Create MITRE ATT&CK attack patterns and relationships
@@ -406,11 +403,7 @@ def _extract_stix_from_vcnvd2(
         result.extend(mitre_objects)
         # Extract only the attack pattern objects for course of action relationships
         attack_patterns.extend(
-            [
-                obj
-                for obj in mitre_objects
-                if hasattr(obj, "type") and obj.type == "attack-pattern"
-            ]
+            [obj for obj in mitre_objects if isinstance(obj, stix2.AttackPattern)]
         )
 
     if SCOPE_COURSE_OF_ACTION in target_scope and attack_patterns:
