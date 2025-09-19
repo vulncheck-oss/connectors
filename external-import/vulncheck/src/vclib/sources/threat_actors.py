@@ -120,9 +120,11 @@ def _extract_threat_actors(
                     _create_rel_targets(
                         threat_actor=threat_actor,
                         vulnerability=vulnerability,
-                        labels=[entity.threat_actor_name]
-                        if entity.threat_actor_name is not None
-                        else [],
+                        labels=(
+                            [entity.threat_actor_name]
+                            if entity.threat_actor_name is not None
+                            else []
+                        ),
                         converter_to_stix=converter_to_stix,
                         logger=logger,
                     )

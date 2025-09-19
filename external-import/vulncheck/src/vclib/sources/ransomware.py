@@ -79,9 +79,11 @@ def _extract_stix_from_ransomware(
                         _create_rel_exploits(
                             malware=malware,
                             vulnerability=vuln,
-                            labels=[entity.ransomware_family]
-                            if entity.ransomware_family is not None
-                            else [],
+                            labels=(
+                                [entity.ransomware_family]
+                                if entity.ransomware_family is not None
+                                else []
+                            ),
                             converter_to_stix=converter_to_stix,
                             logger=logger,
                         )
