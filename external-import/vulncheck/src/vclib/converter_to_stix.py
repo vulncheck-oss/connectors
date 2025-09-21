@@ -473,7 +473,7 @@ class ConverterToStix:
             external_references=[external_ref],
             object_marking_refs=[stix2.TLP_AMBER],
             custom_properties={
-                "x_capec_id": capec_id,
+                "x_mitre_id": capec_id,
             },
         )
         return attack_pattern
@@ -514,7 +514,7 @@ class ConverterToStix:
         return attack_pattern
 
     def create_course_of_action(
-        self, name: str, description: str, mitigation_url: str = None
+        self, name: str, description: str, mitigation_url=None
     ) -> stix2.CourseOfAction:
         """Create Course of Action Object
 
