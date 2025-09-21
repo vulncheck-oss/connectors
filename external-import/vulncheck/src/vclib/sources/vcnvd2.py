@@ -261,11 +261,11 @@ def _create_capec_attack_patterns_and_relationships(
             )
             result.append(capec_attack_pattern)
 
-            # Create relationship: vulnerability -> uses -> attack pattern
+            # Create relationship: attack pattern -> targets -> vulnerability
             relationship = converter_to_stix.create_relationship(
-                source_id=vuln["id"],
-                relationship_type="uses",
-                target_id=capec_attack_pattern["id"],
+                source_id=capec_attack_pattern["id"],
+                relationship_type="targets",
+                target_id=vuln["id"],
             )
             result.append(relationship)
 
@@ -297,11 +297,11 @@ def _create_mitre_attack_patterns_and_relationships(
             )
             result.append(mitre_attack_pattern)
 
-            # Create relationship: vulnerability -> uses -> attack pattern
+            # Create relationship: attack pattern -> targets -> vulnerability
             relationship = converter_to_stix.create_relationship(
-                source_id=vuln["id"],
-                relationship_type="uses",
-                target_id=mitre_attack_pattern["id"],
+                source_id=mitre_attack_pattern["id"],
+                relationship_type="targets",
+                target_id=vuln["id"],
             )
             result.append(relationship)
 
@@ -503,7 +503,6 @@ def _collect_vc_nvd2_from_backup(
                         logger=logger,
                         source_name=source_name,
                         stix_objects=stix_objects,
-                        target_scope=target_scope,
                         work_id=work_id,
                         work_num=work_num,
                     )

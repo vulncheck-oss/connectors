@@ -328,7 +328,6 @@ def _collect_nist_nvd2_from_backup(
                             logger=logger,
                             source_name=source_name,
                             stix_objects=stix_objects,
-                            target_scope=target_scope,
                             work_id=work_id,
                             work_num=work_num,
                         )
