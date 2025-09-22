@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from vclib.util.config import (
     SCOPE_ATTACK_PATTERN,
     SCOPE_COURSE_OF_ACTION,
+    SCOPE_DATA_SOURCE,
     SCOPE_SOFTWARE,
     SCOPE_VULNERABILITY,
     compare_config_to_target_scope,
@@ -344,24 +345,87 @@ def _create_course_of_actions_and_relationships(
                     )
                     result.append(course_of_action)
 
-                    # Create relationship: course-of-action -> mitigates -> attack-pattern
-                    # Only create relationship if the corresponding attack pattern exists
-                    if technique.id in attack_pattern_map:
-                        relationship = converter_to_stix.create_relationship(
-                            source_id=course_of_action["id"],
-                            relationship_type="mitigates",
-                            target_id=attack_pattern_map[technique.id]["id"],
+                    relationship = converter_to_stix.create_relationship(
+                        source_id=course_of_action["id"],
+                        relationship_type="mitigates",
+                        target_id=attack_pattern_map[technique.id]["id"],
+                    )
+                    result.append(relationship)
+
+                    logger.debug(
+                        "[VULNCHECK NVD-2] Created Course of Action and mitigation relationship",
+                        {
+                            "mitigation_id": mitigation.id,
+                            "technique_id": technique.id,
+                            "cve": entity.id,
+                        },
+                    )
+
+    return result
+
+
+def _create_data_sources_and_relationships(
+    entity: ApiNVD20CVEExtended, attack_patterns: list, converter_to_stix, logger
+) -> list:
+    """Create Data Source objects and relationships from MITRE attack technique detections."""
+    result = []
+
+    if entity.mitre_attack_techniques is None:
+        return result
+
+    # Create a map of attack pattern IDs to attack pattern objects for quick lookup
+    attack_pattern_map = {}
+    for ap in attack_patterns:
+        if (
+            hasattr(ap, "id")
+            and hasattr(ap, "custom_properties")
+            and "x_mitre_id" in ap.custom_properties
+        ):
+            attack_pattern_map[ap.custom_properties["x_mitre_id"]] = ap
+
+    # Track created data sources to avoid duplicates
+    created_data_sources = {}
+
+    for technique in entity.mitre_attack_techniques:
+        if technique.id is not None and technique.detections is not None:
+            for detection in technique.detections:
+                if detection.id is not None and detection.datasource is not None:
+                    # Create Data Source object (only once per data source)
+                    if detection.id not in created_data_sources:
+                        data_source = converter_to_stix.create_mitre_data_source(
+                            data_source_id=detection.id,
+                            data_source_name=detection.datasource,
+                            data_component_url=detection.datacomponent
+                            or f"https://attack.mitre.org/datasources/{detection.id}",
                         )
-                        result.append(relationship)
+                        result.append(data_source)
+                        created_data_sources[detection.id] = data_source
 
                         logger.debug(
-                            "[VULNCHECK NVD-2] Created Course of Action and mitigation relationship",
+                            "[VULNCHECK NVD-2] Created Data Source object",
                             {
-                                "mitigation_id": mitigation.id,
-                                "technique_id": technique.id,
+                                "data_source_id": detection.id,
+                                "data_source_name": detection.datasource,
                                 "cve": entity.id,
                             },
                         )
+
+                    # Create relationship: data-source -> detects -> attack-pattern
+                    relationship = converter_to_stix.create_relationship(
+                        source_id=created_data_sources[detection.id]["id"],
+                        relationship_type="detects",
+                        target_id=attack_pattern_map[technique.id]["id"],
+                    )
+                    result.append(relationship)
+
+                    logger.debug(
+                        "[VULNCHECK NVD-2] Created Data Source detection relationship",
+                        {
+                            "data_source_id": detection.id,
+                            "technique_id": technique.id,
+                            "cve": entity.id,
+                        },
+                    )
 
     return result
 
@@ -410,6 +474,17 @@ def _extract_stix_from_vcnvd2(
         # Create Course of Action objects and relationships to attack patterns
         result.extend(
             _create_course_of_actions_and_relationships(
+                entity=entity,
+                attack_patterns=attack_patterns,
+                converter_to_stix=converter_to_stix,
+                logger=logger,
+            )
+        )
+
+    if SCOPE_DATA_SOURCE in target_scope and attack_patterns:
+        # Create Data Source objects and relationships to attack patterns
+        result.extend(
+            _create_data_sources_and_relationships(
                 entity=entity,
                 attack_patterns=attack_patterns,
                 converter_to_stix=converter_to_stix,
@@ -575,6 +650,7 @@ def collect_vcnvd2(
         SCOPE_SOFTWARE,
         SCOPE_ATTACK_PATTERN,
         SCOPE_COURSE_OF_ACTION,
+        SCOPE_DATA_SOURCE,
     ]
     target_scope = compare_config_to_target_scope(
         config=config,

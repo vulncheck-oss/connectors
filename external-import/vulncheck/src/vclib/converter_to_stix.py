@@ -550,3 +550,40 @@ class ConverterToStix:
             object_marking_refs=[stix2.TLP_AMBER],
         )
         return course_of_action
+
+    def create_mitre_data_source(
+        self, data_source_id: str, data_source_name: str, data_component_url: str
+    ) -> dict:
+        """Create MITRE Data Source Object (x-mitre-data-source)
+
+        Args:
+            data_source_id (str): MITRE data source ID (e.g., "DS0015")
+            data_source_name (str): Data source name (e.g., "Application Log")
+            data_component_url (str): URL to the data component
+
+        Returns:
+            dict: MITRE Data Source Object
+
+        Examples:
+            >>> create_mitre_data_source("DS0015", "Application Log", "https://attack.mitre.org/datasources/DS0015/#Application%20Log%20Content")
+        """
+        # Create external reference for MITRE data source
+        external_ref = stix2.ExternalReference(
+            source_name="mitre-attack",
+            external_id=data_source_id,
+            url=data_component_url,
+        )
+
+        # Create custom x-mitre-data-source object
+        data_source = {
+            "type": "x-mitre-data-source",
+            "spec_version": "2.1",
+            "id": f"x-mitre-data-source--{data_source_id.lower()}",
+            "name": data_source_name,
+            "created_by_ref": self.author.id,
+            "external_references": [external_ref],
+            "object_marking_refs": [str(stix2.TLP_AMBER.id)],
+            "x_mitre_version": "1.0",
+            "x_mitre_data_source_id": data_source_id,
+        }
+        return data_source
