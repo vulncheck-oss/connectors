@@ -326,7 +326,12 @@ def _create_course_of_actions_and_relationships(
     # Create a map of attack pattern IDs to attack pattern objects for quick lookup
     attack_pattern_map = {}
     for ap in attack_patterns:
-        if (
+        # Handle dictionary format
+        if isinstance(ap, dict):
+            if "id" in ap and "x_mitre_id" in ap.get("custom_properties", {}):
+                attack_pattern_map[ap["custom_properties"]["x_mitre_id"]] = ap
+        # Handle STIX object format (fallback)
+        elif (
             hasattr(ap, "id")
             and hasattr(ap, "custom_properties")
             and "x_mitre_id" in ap.custom_properties
@@ -335,6 +340,14 @@ def _create_course_of_actions_and_relationships(
 
     for technique in entity.mitre_attack_techniques:
         if technique.id is not None and technique.mitigations is not None:
+            # Only process if corresponding attack pattern exists
+            if technique.id not in attack_pattern_map:
+                logger.debug(
+                    "[VULNCHECK NVD-2] Skipping course of action - no corresponding attack pattern",
+                    {"technique_id": technique.id, "cve": entity.id},
+                )
+                continue
+
             for mitigation in technique.mitigations:
                 if mitigation.id is not None and mitigation.description is not None:
                     # Create Course of Action object
@@ -376,7 +389,12 @@ def _create_data_sources_and_relationships(
     # Create a map of attack pattern IDs to attack pattern objects for quick lookup
     attack_pattern_map = {}
     for ap in attack_patterns:
-        if (
+        # Handle dictionary format
+        if isinstance(ap, dict):
+            if "id" in ap and "x_mitre_id" in ap.get("custom_properties", {}):
+                attack_pattern_map[ap["custom_properties"]["x_mitre_id"]] = ap
+        # Handle STIX object format (fallback)
+        elif (
             hasattr(ap, "id")
             and hasattr(ap, "custom_properties")
             and "x_mitre_id" in ap.custom_properties
@@ -388,6 +406,14 @@ def _create_data_sources_and_relationships(
 
     for technique in entity.mitre_attack_techniques:
         if technique.id is not None and technique.detections is not None:
+            # Only process if corresponding attack pattern exists
+            if technique.id not in attack_pattern_map:
+                logger.debug(
+                    "[VULNCHECK NVD-2] Skipping data source - no corresponding attack pattern",
+                    {"technique_id": technique.id, "cve": entity.id},
+                )
+                continue
+
             for detection in technique.detections:
                 if detection.id is not None and detection.datasource is not None:
                     # Create Data Source object (only once per data source)
