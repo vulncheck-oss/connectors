@@ -323,56 +323,57 @@ def _create_course_of_actions_and_relationships(
     if entity.mitre_attack_techniques is None:
         return result
 
-    # Create a map of attack pattern IDs to attack pattern objects for quick lookup
-    attack_pattern_map = {}
-    for ap in attack_patterns:
-        # Handle dictionary format
-        if isinstance(ap, dict):
-            if "id" in ap and "x_mitre_id" in ap.get("custom_properties", {}):
-                attack_pattern_map[ap["custom_properties"]["x_mitre_id"]] = ap
-        # Handle STIX object format (fallback)
-        elif (
-            hasattr(ap, "id")
-            and hasattr(ap, "custom_properties")
-            and "x_mitre_id" in ap.custom_properties
-        ):
-            attack_pattern_map[ap.custom_properties["x_mitre_id"]] = ap
-
     for technique in entity.mitre_attack_techniques:
         if technique.id is not None and technique.mitigations is not None:
-            # Only process if corresponding attack pattern exists
-            if technique.id not in attack_pattern_map:
-                logger.debug(
-                    "[VULNCHECK NVD-2] Skipping course of action - no corresponding attack pattern",
-                    {"technique_id": technique.id, "cve": entity.id},
-                )
-                continue
-
             for mitigation in technique.mitigations:
                 if mitigation.id is not None and mitigation.description is not None:
                     # Create Course of Action object
                     course_of_action = converter_to_stix.create_course_of_action(
-                        name=mitigation.id,
+                        mitigation_id=mitigation.id,
                         description=mitigation.description,
                         mitigation_url=mitigation.mitigation_url,
                     )
                     result.append(course_of_action)
 
-                    relationship = converter_to_stix.create_relationship(
-                        source_id=course_of_action["id"],
-                        relationship_type="mitigates",
-                        target_id=attack_pattern_map[technique.id]["id"],
-                    )
-                    result.append(relationship)
+                    # Find the corresponding attack pattern object
+                    attack_pattern_id = None
+                    for ap in attack_patterns:
+                        # STIX2 objects support both dict-like and attribute access
+                        mitre_id = (
+                            ap.get("x_mitre_id")
+                            if hasattr(ap, "get")
+                            else getattr(ap, "x_mitre_id", None)
+                        )
+                        if mitre_id == technique.id:
+                            attack_pattern_id = ap["id"]
+                            break
 
-                    logger.debug(
-                        "[VULNCHECK NVD-2] Created Course of Action and mitigation relationship",
-                        {
-                            "mitigation_id": mitigation.id,
-                            "technique_id": technique.id,
-                            "cve": entity.id,
-                        },
-                    )
+                    if attack_pattern_id:
+                        relationship = converter_to_stix.create_relationship(
+                            source_id=course_of_action["id"],
+                            relationship_type="mitigates",
+                            target_id=attack_pattern_id,
+                        )
+                        result.append(relationship)
+
+                        logger.debug(
+                            "[VULNCHECK NVD-2] Created Course of Action and mitigation relationship",
+                            {
+                                "mitigation_id": mitigation.id,
+                                "technique_id": technique.id,
+                                "attack_pattern_id": attack_pattern_id,
+                                "cve": entity.id,
+                            },
+                        )
+                    else:
+                        logger.debug(
+                            "[VULNCHECK NVD-2] No matching attack pattern found for mitigation",
+                            {
+                                "mitigation_id": mitigation.id,
+                                "technique_id": technique.id,
+                                "cve": entity.id,
+                            },
+                        )
 
     return result
 
@@ -386,34 +387,11 @@ def _create_data_sources_and_relationships(
     if entity.mitre_attack_techniques is None:
         return result
 
-    # Create a map of attack pattern IDs to attack pattern objects for quick lookup
-    attack_pattern_map = {}
-    for ap in attack_patterns:
-        # Handle dictionary format
-        if isinstance(ap, dict):
-            if "id" in ap and "x_mitre_id" in ap.get("custom_properties", {}):
-                attack_pattern_map[ap["custom_properties"]["x_mitre_id"]] = ap
-        # Handle STIX object format (fallback)
-        elif (
-            hasattr(ap, "id")
-            and hasattr(ap, "custom_properties")
-            and "x_mitre_id" in ap.custom_properties
-        ):
-            attack_pattern_map[ap.custom_properties["x_mitre_id"]] = ap
-
     # Track created data sources to avoid duplicates
     created_data_sources = {}
 
     for technique in entity.mitre_attack_techniques:
         if technique.id is not None and technique.detections is not None:
-            # Only process if corresponding attack pattern exists
-            if technique.id not in attack_pattern_map:
-                logger.debug(
-                    "[VULNCHECK NVD-2] Skipping data source - no corresponding attack pattern",
-                    {"technique_id": technique.id, "cve": entity.id},
-                )
-                continue
-
             for detection in technique.detections:
                 if detection.id is not None and detection.datasource is not None:
                     # Create Data Source object (only once per data source)
@@ -421,8 +399,7 @@ def _create_data_sources_and_relationships(
                         data_source = converter_to_stix.create_mitre_data_source(
                             data_source_id=detection.id,
                             data_source_name=detection.datasource,
-                            data_component_url=detection.datacomponent
-                            or f"https://attack.mitre.org/datasources/{detection.id}",
+                            data_component_url=detection.datacomponent,
                         )
                         result.append(data_source)
                         created_data_sources[detection.id] = data_source
@@ -436,22 +413,47 @@ def _create_data_sources_and_relationships(
                             },
                         )
 
-                    # Create relationship: data-source -> detects -> attack-pattern
-                    relationship = converter_to_stix.create_relationship(
-                        source_id=created_data_sources[detection.id]["id"],
-                        relationship_type="detects",
-                        target_id=attack_pattern_map[technique.id]["id"],
-                    )
-                    result.append(relationship)
+                    # Find the corresponding attack pattern object
+                    attack_pattern_id = None
+                    for ap in attack_patterns:
+                        # STIX2 objects support both dict-like and attribute access
+                        mitre_id = (
+                            ap.get("x_mitre_id")
+                            if hasattr(ap, "get")
+                            else getattr(ap, "x_mitre_id", None)
+                        )
+                        if mitre_id == technique.id:
+                            attack_pattern_id = ap["id"]
+                            break
 
-                    logger.debug(
-                        "[VULNCHECK NVD-2] Created Data Source detection relationship",
-                        {
-                            "data_source_id": detection.id,
-                            "technique_id": technique.id,
-                            "cve": entity.id,
-                        },
-                    )
+                    if attack_pattern_id:
+                        # Create relationship: attack-pattern -> related-to -> data-source
+                        relationship = converter_to_stix.create_relationship(
+                            source_id=attack_pattern_id,
+                            relationship_type="related-to",
+                            target_id=created_data_sources[detection.id]["id"],
+                        )
+                        result.append(relationship)
+
+                        logger.debug(
+                            "[VULNCHECK NVD-2] Created Attack Pattern to Data Source relationship",
+                            {
+                                "data_source_id": detection.id,
+                                "technique_id": technique.id,
+                                "attack_pattern_id": attack_pattern_id,
+                                "relationship_type": "related-to",
+                                "cve": entity.id,
+                            },
+                        )
+                    else:
+                        logger.debug(
+                            "[VULNCHECK NVD-2] No matching attack pattern found for data source",
+                            {
+                                "data_source_id": detection.id,
+                                "technique_id": technique.id,
+                                "cve": entity.id,
+                            },
+                        )
 
     return result
 
@@ -478,10 +480,6 @@ def _extract_stix_from_vcnvd2(
             logger=logger,
         )
         result.extend(capec_objects)
-        # Extract only the attack pattern objects for course of action relationships
-        attack_patterns.extend(
-            [obj for obj in capec_objects if isinstance(obj, stix2.AttackPattern)]
-        )
 
         # Create MITRE ATT&CK attack patterns and relationships
         mitre_objects = _create_mitre_attack_patterns_and_relationships(
@@ -491,6 +489,7 @@ def _extract_stix_from_vcnvd2(
             logger=logger,
         )
         result.extend(mitre_objects)
+
         # Extract only the attack pattern objects for course of action relationships
         attack_patterns.extend(
             [obj for obj in mitre_objects if isinstance(obj, stix2.AttackPattern)]

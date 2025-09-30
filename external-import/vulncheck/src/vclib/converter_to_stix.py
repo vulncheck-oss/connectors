@@ -1,4 +1,5 @@
 import ipaddress
+import uuid
 from datetime import datetime
 
 import stix2
@@ -15,6 +16,37 @@ from pycti import (
     ThreatActorGroup,
     Vulnerability,
 )
+from stix2.properties import StringProperty
+from stix2.v21 import CustomObject
+
+
+# Define custom MITRE Data Source object type
+@CustomObject(
+    "x-mitre-data-source",
+    [
+        ("name", StringProperty(required=True)),
+        ("x_mitre_version", StringProperty()),
+        ("x_mitre_data_source_id", StringProperty()),
+    ],
+)
+class MitreDataSource:
+    @staticmethod
+    def generate_id(data_source_name: str, data_source_id: str) -> str:
+        """Generate a deterministic STIX ID for a MITRE Data Source.
+
+        Args:
+            data_source_name (str): Name of the data source
+            data_source_id (str): MITRE data source ID (e.g., "DS0015")
+
+        Returns:
+            str: STIX ID in format x-mitre-data-source--<UUID>
+        """
+        # Generate deterministic UUID based on data source name and ID
+        namespace = uuid.UUID("00000000-0000-0000-0000-000000000000")
+        deterministic_uuid = uuid.uuid5(
+            namespace, f"{data_source_name}-{data_source_id}"
+        )
+        return f"x-mitre-data-source--{deterministic_uuid}"
 
 
 class ConverterToStix:
@@ -95,6 +127,7 @@ class ConverterToStix:
             created_by_ref=self.author,
             object_marking_refs=[stix2.TLP_AMBER],
             labels=labels,
+            allow_custom=True,
         )
         return relationship
 
@@ -495,7 +528,7 @@ class ConverterToStix:
             >>> create_mitre_attack_pattern("T1190", "Exploit Public-Facing Application", "https://attack.mitre.org/techniques/T1190")
         """
         external_ref = stix2.ExternalReference(
-            source_name="mitre-attack",
+            source_name=technique_id,
             external_id=technique_id,
             url=technique_url,
         )
@@ -514,7 +547,7 @@ class ConverterToStix:
         return attack_pattern
 
     def create_course_of_action(
-        self, name: str, description: str, mitigation_url=None
+        self, mitigation_id: str, description: str, mitigation_url=None
     ) -> stix2.CourseOfAction:
         """Create Course of Action Object
 
@@ -536,14 +569,15 @@ class ConverterToStix:
         # Add MITRE mitigation URL as external reference if provided
         if mitigation_url is not None:
             mitigation_external_ref = stix2.ExternalReference(
-                source_name="mitre-attack",
+                source_name=mitigation_id,
+                external_id=mitigation_id,
                 url=mitigation_url,
             )
             external_references.append(mitigation_external_ref)
 
         course_of_action = stix2.CourseOfAction(
-            id=CourseOfAction.generate_id(name),
-            name=name,
+            id=CourseOfAction.generate_id(mitigation_id),
+            name=mitigation_id,
             description=description,
             created_by_ref=self.author,
             external_references=external_references,
@@ -552,38 +586,45 @@ class ConverterToStix:
         return course_of_action
 
     def create_mitre_data_source(
-        self, data_source_id: str, data_source_name: str, data_component_url: str
-    ) -> dict:
-        """Create MITRE Data Source Object (x-mitre-data-source)
+        self,
+        data_source_id: str,
+        data_source_name: str,
+        data_component_url: str | None = None,
+    ) -> MitreDataSource:
+        """Create MITRE Data Source Object with data component URL as external reference
 
         Args:
             data_source_id (str): MITRE data source ID (e.g., "DS0015")
             data_source_name (str): Data source name (e.g., "Application Log")
-            data_component_url (str): URL to the data component
+            data_component_url (str, optional): URL to the data component
 
         Returns:
-            dict: MITRE Data Source Object
+            MitreDataSource: Data Source Object
 
         Examples:
             >>> create_mitre_data_source("DS0015", "Application Log", "https://attack.mitre.org/datasources/DS0015/#Application%20Log%20Content")
         """
-        # Create external reference for MITRE data source
-        external_ref = stix2.ExternalReference(
-            source_name="mitre-attack",
-            external_id=data_source_id,
-            url=data_component_url,
+        # Create external references list
+        external_refs = []
+
+        # Add data component URL as additional external reference if it exists
+        if data_component_url:
+            external_refs.append(
+                stix2.ExternalReference(
+                    source_name=data_source_id,
+                    url=data_component_url,
+                )
+            )
+
+        # Create data source object
+        data_source = MitreDataSource(
+            id=MitreDataSource.generate_id(data_source_name, data_source_id),
+            name=data_source_name,
+            created_by_ref=self.author.id,
+            object_marking_refs=[stix2.TLP_AMBER],
+            external_references=external_refs,
+            x_mitre_version="1.0",
+            x_mitre_data_source_id=data_source_id,
         )
 
-        # Create custom x-mitre-data-source object
-        data_source = {
-            "type": "x-mitre-data-source",
-            "spec_version": "2.1",
-            "id": f"x-mitre-data-source--{data_source_id.lower()}",
-            "name": data_source_name,
-            "created_by_ref": self.author.id,
-            "external_references": [external_ref],
-            "object_marking_refs": [str(stix2.TLP_AMBER.id)],
-            "x_mitre_version": "1.0",
-            "x_mitre_data_source_id": data_source_id,
-        }
         return data_source
