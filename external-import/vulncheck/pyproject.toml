@@ -11,11 +11,13 @@ authors = [{ name = "VulnCheck" }]
 requires-python = ">= 3.12, <3.13"
 dependencies = [
   "vulncheck-sdk==0.0.40",
-  "pycti==7.260624.0",
+  # pycti is provided transitively by connectors-sdk (matches peer connectors);
+  # do not pin it here to avoid version conflicts with the SDK.
   "pydantic==2.11.9",
   "validators==0.35.0",
   "psutil==7.1.2",
   "stix2==3.0.1",
+  "connectors-sdk @ git+https://github.com/OpenCTI-Platform/connectors.git@master#subdirectory=connectors-sdk",
 ]
 
 [project.optional-dependencies]
